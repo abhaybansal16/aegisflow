@@ -1,0 +1,21 @@
+{
+  "results": [
+    {
+      "check_id": "python.flask.security.injection.sqlalchemy.text",
+      "path": "src/query.py",
+      "start": {
+        "line": 64,
+        "col": 12
+      },
+      "end": {
+        "line": 64,
+        "col": 66
+      },
+      "extra": {
+        "message": "Untrusted request input reaches a SQLAlchemy text query.",
+        "severity": "ERROR"
+      }
+    }
+  ],
+  "errors": []
+}
