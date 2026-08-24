@@ -1,3 +1,6 @@
+[project.scripts]
+aegisflow = "aegisflow.cli:app"
+
 [project]
 name = "aegisflow"
 version = "0.1.0"
@@ -13,10 +16,8 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.52",
+    "typer>=0.27.1",
 ]
-
-[project.scripts]
-aegisflow = "aegisflow:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
@@ -31,3 +32,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/aegisflow/cli.py" = ["B008"]
