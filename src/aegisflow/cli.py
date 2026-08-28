@@ -8,17 +8,24 @@ from typing import Any
 
 import typer
 
+from aegisflow.adapters.trivy import parse_trivy_report
 from aegisflow.db.session import create_db_engine
-from aegisflow.services.imports import ImportSummary, import_semgrep_report
+from aegisflow.services.imports import (
+    ImportSummary,
+    import_normalized_findings,
+    import_semgrep_report,
+)
 
 app = typer.Typer(
     help="Import security scanner reports into AegisFlow.",
     no_args_is_help=True,
 )
 
+
 @app.callback()
 def main() -> None:
     """Provide a root command so AegisFlow keeps explicit subcommands."""
+
 
 @app.command("import-semgrep")
 def import_semgrep(
@@ -68,9 +75,7 @@ def load_json_report(report_path: Path) -> dict[str, Any]:
     try:
         raw_value = json.loads(report_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
-        raise ValueError(
-            f"'{report_path}' is not valid JSON: {error.msg}"
-        ) from error
+        raise ValueError(f"'{report_path}' is not valid JSON: {error.msg}") from error
 
     if not isinstance(raw_value, dict):
         raise TypeError(f"'{report_path}' must contain a JSON object")
@@ -85,3 +90,67 @@ def print_import_summary(summary: ImportSummary) -> None:
     typer.echo(f"  created findings: {summary.created_findings}")
     typer.echo(f"  reused findings: {summary.reused_findings}")
     typer.echo(f"  observations created: {summary.observations_created}")
+
+
+@app.command("import-trivy")
+def import_trivy(
+    report_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to a Trivy JSON report.",
+    ),
+    repository: str = typer.Option(
+        ...,
+        "--repository",
+        "-r",
+        help="Full name of the repository (e.g., owner/repo).",
+    ),
+    commit: str = typer.Option(
+        ...,
+        "--commit",
+        "-c",
+        help="Full SHA of the scanned commit.",
+    ),
+) -> None:
+    """Load one Trivy JSON report and import it atomically."""
+
+    try:
+        # Use the shared helper for consistent error messages
+        report = load_json_report(report_path)
+
+        findings = parse_trivy_report(
+            report=report,
+            repository=repository,
+            commit_sha=commit,
+        )
+
+        # Flatten Trivy raw vulnerabilities to match normalized findings
+        raw_payloads = []
+        for result in report.get("Results", []):
+            raw_payloads.extend(result.get("Vulnerabilities", []))
+
+        engine = create_db_engine()
+        try:
+            summary = import_normalized_findings(
+                engine=engine,
+                repository_full_name=repository,
+                commit_sha=commit,
+                findings=findings,
+                raw_payloads=raw_payloads,
+                source_report=report,
+            )
+        finally:
+            engine.dispose()
+
+        # Fix: use the correct function name
+        print_import_summary(summary)
+
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(f"Import failed: {error}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as error:
+        typer.echo(f"Unexpected error: {error}", err=True)
+        raise typer.Exit(code=1)
