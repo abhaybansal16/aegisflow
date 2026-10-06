@@ -8,6 +8,7 @@ from typing import Any
 
 import typer
 
+from aegisflow.adapters.gitleaks import parse_gitleaks_report
 from aegisflow.adapters.trivy import parse_trivy_report
 from aegisflow.db.session import create_db_engine
 from aegisflow.services.imports import (
@@ -82,6 +83,19 @@ def load_json_report(report_path: Path) -> dict[str, Any]:
     return raw_value
 
 
+def load_json_array_report(report_path: Path) -> list[Any]:
+    """Read one JSON array report from disk for the CLI boundary."""
+
+    try:
+        raw_value = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"'{report_path}' is not valid JSON: {error.msg}") from error
+
+    if not isinstance(raw_value, list):
+        raise TypeError(f"'{report_path}' must contain a JSON array")
+    return raw_value
+
+
 def print_import_summary(summary: ImportSummary) -> None:
     """Print a concise result suitable for local use and future CI logs."""
 
@@ -153,4 +167,57 @@ def import_trivy(
         raise typer.Exit(code=1)
     except Exception as error:
         typer.echo(f"Unexpected error: {error}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command("import-gitleaks")
+def import_gitleaks(
+    report_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to a Gitleaks JSON report.",
+    ),
+    repository: str = typer.Option(
+        ...,
+        "--repository",
+        "-r",
+        help="Full name of the repository (e.g., owner/repo).",
+    ),
+    commit: str = typer.Option(
+        ...,
+        "--commit",
+        "-c",
+        help="Full SHA of the scanned commit.",
+    ),
+) -> None:
+    """Load one Gitleaks JSON report and import it atomically."""
+
+    try:
+        report = load_json_array_report(report_path)
+        findings = parse_gitleaks_report(
+            report=report,
+            repository=repository,
+            commit_sha=commit,
+        )
+
+        engine = create_db_engine()
+        try:
+            summary = import_normalized_findings(
+                engine=engine,
+                repository_full_name=repository,
+                commit_sha=commit,
+                findings=findings,
+                raw_payloads=report,
+                source_report={"leaks": report},
+            )
+        finally:
+            engine.dispose()
+
+        print_import_summary(summary)
+
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(f"Import failed: {error}", err=True)
         raise typer.Exit(code=1)

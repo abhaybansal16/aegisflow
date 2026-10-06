@@ -1,0 +1,22 @@
+[
+  {
+    "Description": "Generic API Key",
+    "StartLine": 12,
+    "EndLine": 12,
+    "StartColumn": 15,
+    "EndColumn": 54,
+    "Match": "api_key = \"REDACTED_TEST_API_KEY\"",
+    "Secret": "REDACTED_TEST_API_KEY",
+    "File": "src/config.py",
+    "SymlinkFile": "",
+    "Commit": "0123456789abcdef",
+    "Entropy": 3.95,
+    "Author": "Demo Author",
+    "Email": "demo@example.com",
+    "Date": "2026-01-01T00:00:00Z",
+    "Message": "Add API client configuration",
+    "Tags": [],
+    "RuleID": "generic-api-key",
+    "Fingerprint": "0123456789abcdef:src/config.py:generic-api-key:12"
+  }
+]
